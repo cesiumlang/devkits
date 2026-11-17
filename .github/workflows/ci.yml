@@ -265,7 +265,10 @@ jobs:
           entries='{}'
           for manifest in cesium-devkit-*.json; do
             host=$(jq -er .host "$manifest")
-            asset=$(ls "${manifest%.json}".tar.xz "${manifest%.json}".zip 2>/dev/null | head -1)
+            # ls would fail the step for the archive type the host does not have
+            asset=${manifest%.json}.tar.xz
+            [ -f "$asset" ] || asset=${manifest%.json}.zip
+            [ -f "$asset" ] || { echo "::error::no archive for $manifest"; exit 1; }
             sum=$(sha256sum "$asset" | cut -d' ' -f1)
             entries=$(jq --arg h "$host" --arg a "$asset" --arg s "$sum" --arg m "$manifest" \
               --arg repo "$GITHUB_REPOSITORY" --arg tag "v$VERSION" \
