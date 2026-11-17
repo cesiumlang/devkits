@@ -50,9 +50,21 @@ fi
 
 cross_cc () { echo "$ZIG;$1;-fno-sanitize=all;-s;-target;$HOST;-mcpu=$MCPU"; }
 
+# CMake says only that a check failed; why is at the end of its configure log
+configure () { # <build dir> <cmake argument>...
+  local dir=$1
+  shift
+  if ! cmake -B "$dir" "$@"; then
+    echo "::group::tail of $dir/CMakeFiles/CMakeConfigureLog.yaml"
+    tail -n 150 "$dir/CMakeFiles/CMakeConfigureLog.yaml" || true
+    echo "::endgroup::"
+    exit 1
+  fi
+}
+
 # 1. llvm-tblgen for the machine this runs on (the only native piece)
 TBLGEN=$WORK/build-tblgen-$BUILDER
-cmake -S "$SRC/llvm" -B "$TBLGEN" -G Ninja \
+configure "$TBLGEN" -S "$SRC/llvm" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="$ZIG;cc;-target;$BUILDER;-mcpu=$MCPU" \
   -DCMAKE_CXX_COMPILER="$ZIG;c++;-target;$BUILDER;-mcpu=$MCPU" \
@@ -78,7 +90,7 @@ cmake -S "$SRC/llvm" -B "$TBLGEN" -G Ninja \
 cmake --build "$TBLGEN" --target llvm-tblgen
 
 # 2. LLVM core, the targets of devkit.json, and LLD, as static libraries
-cmake -S "$SRC/llvm" -B "$BUILD" -G Ninja \
+configure "$BUILD" -S "$SRC/llvm" -G Ninja \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CROSSCOMPILING=True \
