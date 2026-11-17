@@ -1,0 +1,59 @@
+{
+  "version": "0.1.0",
+  "zig": {
+    "version": "0.17.1",
+    "base_url": "https://ziglang.org/download/0.17.1",
+    "archives": {
+      "x86_64-linux-musl": {
+        "file": "zig-x86_64-linux-0.17.1.tar.xz",
+        "sha256": "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
+      },
+      "aarch64-linux-musl": {
+        "file": "zig-aarch64-linux-0.17.1.tar.xz",
+        "sha256": "a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795"
+      },
+      "x86_64-windows-gnu": {
+        "file": "zig-x86_64-windows-0.17.1.zip",
+        "sha256": "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e"
+      },
+      "aarch64-windows-gnu": {
+        "file": "zig-aarch64-windows-0.17.1.zip",
+        "sha256": "4789895bdb1e312a2ea73b2a7c0a0cc8d2ab62ba6976e834a7c54cf443377c15"
+      },
+      "x86_64-macos-none": {
+        "file": "zig-x86_64-macos-0.17.1.tar.xz",
+        "sha256": "9af07b20319fbd0c92ee46ad23e81d6a782b1aaea2cfb8dcbff35f1d2c7ddbb7"
+      },
+      "aarch64-macos-none": {
+        "file": "zig-aarch64-macos-0.17.1.tar.xz",
+        "sha256": "75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d"
+      }
+    }
+  },
+  "llvm": {
+    "version": "22.1.8",
+    "tag": "llvmorg-22.1.8",
+    "commit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+    "targets": ["X86", "AArch64", "ARM", "PowerPC", "SPIRV", "WebAssembly"],
+    "projects": ["lld"]
+  },
+  "qbe": {
+    "commit": "180d2eb4157b706dc480bce50ff6d03a65ec334b",
+    "default_target": {
+      "x86_64-linux-musl": "amd64_sysv",
+      "aarch64-linux-musl": "arm64",
+      "x86_64-windows-gnu": "amd64_win",
+      "aarch64-windows-gnu": "amd64_win",
+      "x86_64-macos-none": "amd64_apple",
+      "aarch64-macos-none": "arm64_apple"
+    }
+  },
+  "hosts": [
+    { "triple": "x86_64-linux-musl", "runner": "ubuntu-24.04" },
+    { "triple": "aarch64-linux-musl", "runner": "ubuntu-24.04-arm" },
+    { "triple": "x86_64-windows-gnu", "runner": "windows-2025" },
+    { "triple": "aarch64-windows-gnu", "runner": "windows-11-arm" },
+    { "triple": "x86_64-macos-none", "runner": "macos-15-intel" },
+    { "triple": "aarch64-macos-none", "runner": "macos-15" }
+  ]
+}

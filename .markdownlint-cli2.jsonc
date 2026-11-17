@@ -1,0 +1,8 @@
+{
+  "ignores": [
+    "llvm-project/**",
+    "qbe/**",
+    "work/**",
+    "dist/**"
+  ]
+}

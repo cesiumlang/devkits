@@ -1,0 +1,8 @@
+# QBE IL for: int main(void) { puts("hello from qbe"); return 0; }
+data $msg = { b "hello from qbe", b 0 }
+
+export function w $main() {
+@start
+	%r =w call $puts(l $msg)
+	ret 0
+}

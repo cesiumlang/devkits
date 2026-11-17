@@ -1,0 +1,12 @@
+# A change to only files matching these (bash globs, one per line) runs the
+# workflow but skips its work, so it passes at once.
+*.md
+LICENSE
+.markdownlint.jsonc
+.markdownlint-cli2.jsonc
+.cspell.jsonc
+.editorconfig
+.gitattributes
+.gitignore
+.vscode/*
+*.code-workspace

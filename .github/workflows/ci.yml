@@ -1,0 +1,305 @@
+name: CI
+
+# Builds the Cesium devkit of every host in devkit.json: the pinned official
+# Zig, LLVM and LLD cross-compiled with it as static libraries (no Clang, no
+# tools), and the pinned QBE. Each devkit is smoke-tested on the host's own
+# runner. A push to main whose devkit.json version has no release yet
+# publishes them as the immutable release v<version>.
+#
+# Pull requests and pushes to dev build and test without publishing. A change
+# to only the files of no-ci.txt skips the work and passes at once.
+#
+# Jobs:
+#   changes  skip everything for a change to only files of no-ci.txt
+#   prepare  the version, the host matrix, and whether this run publishes
+#   lint     shellcheck, and the submodules against the pins of devkit.json
+#   build    one devkit per host, cross-compiled on Linux
+#   smoke    each devkit on its own host
+#   publish  the release v<version>: archives, manifests, devkits.json, SHA256SUMS
+#   CI       the one check the rulesets require
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the release even from a branch other than main
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_NOHASHDIR: true
+  CCACHE_MAXSIZE: 3G
+  CCACHE_COMPRESS: true
+
+jobs:
+  changes:
+    name: Changes
+    runs-on: ubuntu-24.04
+    outputs:
+      ci: ${{ steps.changes.outputs.ci }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Anything outside no-ci.txt changed?
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          AFTER: ${{ github.event.pull_request.head.sha || github.sha }}
+        # changes.sh compares a push's two ends; a pull request is compared
+        # with its base the same way
+        run: |
+          [ "$EVENT" = pull_request ] && EVENT=push
+          bash .github/scripts/changes.sh "$EVENT" "$BEFORE" "$AFTER" | tee -a "$GITHUB_OUTPUT"
+
+  prepare:
+    name: Prepare
+    needs: changes
+    if: needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.pins.outputs.version }}
+      hosts: ${{ steps.pins.outputs.hosts }}
+      llvm_key: ${{ steps.pins.outputs.llvm_key }}
+      publish: ${{ steps.publish.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read devkit.json
+        id: pins
+        run: |
+          {
+            echo "version=$(jq -er .version devkit.json)"
+            echo "hosts=$(jq -c .hosts devkit.json)"
+            # what the LLVM objects depend on: the pins and the build script
+            echo "llvm_key=$(jq -c '[.zig.version, .llvm]' devkit.json | cat - scripts/build-llvm.sh | sha256sum | cut -c1-16)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Does this run publish?
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.pins.outputs.version }}
+          WANT: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.publish == true }}
+        run: |
+          if [ "$WANT" != true ]; then
+            echo "publish=false" | tee -a "$GITHUB_OUTPUT"
+          elif gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::v$VERSION is already released; bump the version in devkit.json to publish again"
+            echo "publish=false" | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    name: Lint
+    needs: changes
+    if: needs.changes.outputs.ci == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: shellcheck
+        run: shellcheck --severity=warning -x scripts/*.sh .github/scripts/*.sh
+
+      - name: Submodules match devkit.json
+        run: |
+          check () { # <path> <pinned commit>
+            got=$(git ls-tree HEAD "$1" | awk '{print $3}')
+            [ "$got" = "$2" ] || { echo "::error::$1 is at $got, devkit.json pins $2"; exit 1; }
+          }
+          check llvm-project "$(jq -er .llvm.commit devkit.json)"
+          check qbe "$(jq -er .qbe.commit devkit.json)"
+
+  build:
+    name: Build ${{ matrix.host.triple }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.prepare.outputs.hosts) }}
+    env:
+      HOST: ${{ matrix.host.triple }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # llvm-project at one commit only: its history is several gigabytes
+      - name: Check out the submodules
+        run: |
+          for i in 1 2 3 4 5; do
+            git submodule update --init --depth 1 llvm-project && git submodule update --init qbe && break
+            [ "$i" = 5 ] && { echo "::error::could not fetch the submodules"; exit 1; }
+            sleep $((i * 30))
+          done
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /usr/local/.ghcup /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift \
+            /usr/local/julia* /usr/lib/jvm /usr/share/miniconda
+          df -h /
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build ccache xz-utils zip jq
+
+      - name: Build QBE
+        run: bash scripts/build-qbe.sh "$HOST"
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-llvm-${{ matrix.host.triple }}-${{ needs.prepare.outputs.llvm_key }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-llvm-${{ matrix.host.triple }}-${{ needs.prepare.outputs.llvm_key }}-
+
+      # stops itself before the 6h job limit so the ccache is saved; running
+      # the workflow again resumes from it
+      - name: Build LLVM and LLD
+        run: |
+          set +e
+          CCACHE=ccache timeout 320m bash scripts/build-llvm.sh "$HOST"
+          rc=$?
+          set -e
+          ccache -s
+          [ $rc = 124 ] && echo "::error::time limit reached; re-run the job to resume from the ccache"
+          exit $rc
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-llvm-${{ matrix.host.triple }}-${{ needs.prepare.outputs.llvm_key }}-${{ github.run_id }}
+
+      - name: Package
+        run: bash scripts/package.sh "$HOST"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: devkit-${{ matrix.host.triple }}
+          path: dist/*
+          retention-days: 5
+          # the archives are already compressed
+          compression-level: 0
+
+  smoke:
+    name: Smoke ${{ matrix.host.triple }}
+    needs: [prepare, build]
+    runs-on: ${{ matrix.host.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJSON(needs.prepare.outputs.hosts) }}
+    env:
+      HOST: ${{ matrix.host.triple }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: devkit-${{ matrix.host.triple }}
+          path: dist
+
+      - name: Unpack
+        run: |
+          name=cesium-devkit-$HOST-$VERSION
+          mkdir kit
+          case $HOST in
+            *-windows-*) unzip -q "dist/$name.zip" -d kit ;;
+            *) tar -xJf "dist/$name.tar.xz" -C kit ;;
+          esac
+
+      - name: Smoke test
+        run: bash scripts/smoke.sh "kit/cesium-devkit-$HOST-$VERSION"
+
+  publish:
+    name: Publish
+    needs: [prepare, smoke]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: devkit-*
+          path: dist
+          merge-multiple: true
+
+      # devkits.json is the lookup for consumers: for each host, the archive,
+      # its sha256 and its URL in this release
+      - name: Write devkits.json and SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum cesium-devkit-*.tar.xz cesium-devkit-*.zip > SHA256SUMS
+          cat SHA256SUMS
+          entries='{}'
+          for manifest in cesium-devkit-*.json; do
+            host=$(jq -er .host "$manifest")
+            asset=$(ls "${manifest%.json}".tar.xz "${manifest%.json}".zip 2>/dev/null | head -1)
+            sum=$(sha256sum "$asset" | cut -d' ' -f1)
+            entries=$(jq --arg h "$host" --arg a "$asset" --arg s "$sum" --arg m "$manifest" \
+              --arg repo "$GITHUB_REPOSITORY" --arg tag "v$VERSION" \
+              '. + {($h): {asset: $a, sha256: $s, manifest: $m,
+                url: "https://github.com/\($repo)/releases/download/\($tag)/\($a)"}}' <<< "$entries")
+          done
+          jq --argjson e "$entries" --arg commit "$GITHUB_SHA" \
+            '{version, commit: $commit, zig: .zig.version, llvm: .llvm, qbe: .qbe.commit, devkits: $e}' \
+            ../devkit.json > devkits.json
+          cat devkits.json
+
+      # immutable: the release is created with every asset, never added to
+      - name: Publish
+        working-directory: dist
+        run: |
+          gh release create "v$VERSION" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Cesium devkits $VERSION" \
+            --notes "Devkits for building the Cesium compiler: Zig $(jq -er .zig devkits.json), LLVM and LLD $(jq -er .llvm.version devkits.json) (static libraries, targets $(jq -er '.llvm.targets | join(", ")' devkits.json)), and QBE at \`$(jq -er '.qbe[0:7]' devkits.json)\`. \`devkits.json\` lists the archive of each host with its sha256." \
+            cesium-devkit-* devkits.json SHA256SUMS
+
+  ci:
+    name: CI
+    needs: [changes, prepare, lint, build, smoke, publish]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case $r in
+              success | skipped) ;;
+              *) echo "::error::a job ended as $r"; exit 1 ;;
+            esac
+          done

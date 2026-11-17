@@ -1,0 +1,3 @@
+# sh reads a CR at a line's end as part of the line
+*.sh text eol=lf
+*.ssa text eol=lf
