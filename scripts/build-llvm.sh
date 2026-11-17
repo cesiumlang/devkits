@@ -50,9 +50,21 @@ fi
 
 cross_cc () { echo "$ZIG;$1;-fno-sanitize=all;-s;-target;$HOST;-mcpu=$MCPU"; }
 
+# CMake says only that a check failed; why is at the end of its configure log
+configure () { # <build dir> <cmake argument>...
+  local dir=$1
+  shift
+  if ! cmake -B "$dir" "$@"; then
+    echo "::group::tail of $dir/CMakeFiles/CMakeConfigureLog.yaml"
+    tail -n 150 "$dir/CMakeFiles/CMakeConfigureLog.yaml" || true
+    echo "::endgroup::"
+    exit 1
+  fi
+}
+
 # 1. llvm-tblgen for the machine this runs on (the only native piece)
 TBLGEN=$WORK/build-tblgen-$BUILDER
-cmake -S "$SRC/llvm" -B "$TBLGEN" -G Ninja \
+configure "$TBLGEN" -S "$SRC/llvm" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER="$ZIG;cc;-target;$BUILDER;-mcpu=$MCPU" \
   -DCMAKE_CXX_COMPILER="$ZIG;c++;-target;$BUILDER;-mcpu=$MCPU" \
@@ -78,7 +90,11 @@ cmake -S "$SRC/llvm" -B "$TBLGEN" -G Ninja \
 cmake --build "$TBLGEN" --target llvm-tblgen
 
 # 2. LLVM core, the targets of devkit.json, and LLD, as static libraries
-cmake -S "$SRC/llvm" -B "$BUILD" -G Ninja \
+# (LLVM_BUILD_STATIC is not set: it only adds -static to the link of LLVM's
+# own programs, none of which are built, and CMake's compiler checks then
+# fail for macOS, where nothing links statically. The libraries are static
+# because BUILD_SHARED_LIBS is off by default.)
+configure "$BUILD" -S "$SRC/llvm" -G Ninja \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CROSSCOMPILING=True \
@@ -108,7 +124,6 @@ cmake -S "$SRC/llvm" -B "$BUILD" -G Ninja \
   -DLLVM_TABLEGEN="$TBLGEN/bin/llvm-tblgen" \
   -DLLVM_BUILD_UTILS=OFF \
   -DLLVM_BUILD_TOOLS=OFF \
-  -DLLVM_BUILD_STATIC=ON \
   -DLLVM_INCLUDE_UTILS=OFF \
   -DLLVM_INCLUDE_TESTS=OFF \
   -DLLVM_INCLUDE_EXAMPLES=OFF \

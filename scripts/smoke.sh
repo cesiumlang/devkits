@@ -13,6 +13,7 @@ HOST=$(jq -er .host "$KIT/manifest.json")
 WANT_ZIG=$(jq -er .zig.version "$KIT/manifest.json")
 QBE_TARGET=$(jq -er .qbe.default_target "$KIT/manifest.json")
 EXE=""
+# expanded as ${SYSLIBS[@]+...}: the bash 3.2 of macOS calls an empty array unset
 SYSLIBS=()
 case $HOST in
   *-windows-*)
@@ -35,7 +36,7 @@ printf '#include <stdio.h>\nint main(void) { puts("hello from zig cc"); return 0
 
 echo "== llvm and lld"
 "$ZIG" c++ -target "$HOST" -std=c++17 -fno-exceptions -fno-rtti -O1 \
-  -I"$KIT/llvm/include" "$HERE/smoke/smoke.cpp" "$KIT"/llvm/lib/*.a "${SYSLIBS[@]}" \
+  -I"$KIT/llvm/include" "$HERE/smoke/smoke.cpp" "$KIT"/llvm/lib/*.a ${SYSLIBS[@]+"${SYSLIBS[@]}"} \
   -o "$OUT/smoke$EXE"
 "$OUT/smoke$EXE" "$OUT"
 for f in answer-elf answer-coff.exe answer.wasm; do
@@ -49,8 +50,8 @@ run_hello () { # <assembly file>: assemble, link, run (only where the default ta
       echo "QBE has no arm64 Windows target: $1 is $QBE_TARGET assembly, not run"
       ;;
     *)
-      "$ZIG" cc -target "$HOST" "$1" -o "$1$EXE"
-      [ "$("$1$EXE" | tr -d '\r')" = "hello from qbe" ]
+      "$ZIG" cc -target "$HOST" "$1" -o "${1%.s}$EXE"
+      [ "$("${1%.s}$EXE" | tr -d '\r')" = "hello from qbe" ]
       ;;
   esac
 }
