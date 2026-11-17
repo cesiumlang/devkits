@@ -90,6 +90,10 @@ configure "$TBLGEN" -S "$SRC/llvm" -G Ninja \
 cmake --build "$TBLGEN" --target llvm-tblgen
 
 # 2. LLVM core, the targets of devkit.json, and LLD, as static libraries
+# (LLVM_BUILD_STATIC is not set: it only adds -static to the link of LLVM's
+# own programs, none of which are built, and CMake's compiler checks then
+# fail for macOS, where nothing links statically. The libraries are static
+# because BUILD_SHARED_LIBS is off by default.)
 configure "$BUILD" -S "$SRC/llvm" -G Ninja \
   -DCMAKE_INSTALL_PREFIX="$PREFIX" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -120,7 +124,6 @@ configure "$BUILD" -S "$SRC/llvm" -G Ninja \
   -DLLVM_TABLEGEN="$TBLGEN/bin/llvm-tblgen" \
   -DLLVM_BUILD_UTILS=OFF \
   -DLLVM_BUILD_TOOLS=OFF \
-  -DLLVM_BUILD_STATIC=ON \
   -DLLVM_INCLUDE_UTILS=OFF \
   -DLLVM_INCLUDE_TESTS=OFF \
   -DLLVM_INCLUDE_EXAMPLES=OFF \
