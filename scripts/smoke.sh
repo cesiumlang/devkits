@@ -50,8 +50,8 @@ run_hello () { # <assembly file>: assemble, link, run (only where the default ta
       echo "QBE has no arm64 Windows target: $1 is $QBE_TARGET assembly, not run"
       ;;
     *)
-      "$ZIG" cc -target "$HOST" "$1" -o "$1$EXE"
-      [ "$("$1$EXE" | tr -d '\r')" = "hello from qbe" ]
+      "$ZIG" cc -target "$HOST" "$1" -o "${1%.s}$EXE"
+      [ "$("${1%.s}$EXE" | tr -d '\r')" = "hello from qbe" ]
       ;;
   esac
 }
