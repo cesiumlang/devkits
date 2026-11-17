@@ -19,11 +19,18 @@
       "qbe/**": true,
     },
     "files.associations": {
+      "VERSION": "plaintext",
       ".local-gitignore": "gitignore",
+      ".github/workflows/exempt.txt": "gitignore",
+      ".clangd": "yaml",
+      "**/.claude/projects/*/memory/*.md": "plaintext",
       "no-ci.txt": "gitignore",
       "*.ssa": "plaintext",
     },
     "files.insertFinalNewline": true,
+    "terminal.integrated.automationProfile.windows": {
+      "path": "C:\\windows\\system32\\cmd.exe",
+    },
     "ltex.additionalRules.motherTongue": "en-US",
   },
   "extensions": {
