@@ -71,7 +71,7 @@ configure "$TBLGEN" -S "$SRC/llvm" -G Ninja \
   -DCMAKE_ASM_COMPILER="$ZIG;cc;-target;$BUILDER;-mcpu=$MCPU" \
   -DCMAKE_AR="$TOOLS/ar" \
   -DCMAKE_RANLIB="$TOOLS/ranlib" \
-  "${LAUNCHER[@]}" \
+  ${LAUNCHER[@]+"${LAUNCHER[@]}"} \
   -DLLVM_TARGETS_TO_BUILD="$TARGETS" \
   -DLLVM_APPEND_VC_REV=OFF \
   -DLLVM_ENABLE_BINDINGS=OFF \
@@ -106,7 +106,7 @@ configure "$BUILD" -S "$SRC/llvm" -G Ninja \
   -DCMAKE_LINK_DEPENDS_USE_LINKER=OFF \
   -DCMAKE_AR="$TOOLS/ar" \
   -DCMAKE_RANLIB="$TOOLS/ranlib" \
-  "${LAUNCHER[@]}" \
+  ${LAUNCHER[@]+"${LAUNCHER[@]}"} \
   -DLLVM_TARGETS_TO_BUILD="$TARGETS" \
   -DLLVM_ENABLE_PROJECTS="$PROJECTS" \
   -DLLVM_APPEND_VC_REV=OFF \
