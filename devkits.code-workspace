@@ -6,6 +6,8 @@
   ],
   "settings": {
     "files.exclude": {
+      // LLVM is built from, never edited: keep it out of the explorer
+      "llvm-project": true,
       "work/**": true,
       "dist/**": true,
     },
