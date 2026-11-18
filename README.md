@@ -21,7 +21,7 @@ The design comes from the compiler's decision records: [ADR 0001](https://github
 - `qbe`: the QBE commit, and the target `qbe` emits by default on each host.
 - `hosts`: the hosts a devkit is built for, each with the GitHub runner that tests it.
 
-LLVM and QBE are git submodules (`llvm-project`, `qbe`) at the commits `devkit.json` names; CI fails if they differ. A recursive clone or update skips `llvm-project` (`update = none` in `.gitmodules`), because only a devkit build needs it; the commands below fetch it.
+LLVM and QBE are git submodules (`llvm-project`, `qbe`) at the commits `devkit.json` names; CI fails if they differ.
 
 The LLVM version is the one the pinned Zig's own Clang is built from, and LLVM is compiled with that Zig. Everything linked with these libraries must be compiled with the same Zig, so that the C++ standard library matches. When Zig is bumped, LLVM is rebuilt.
 
@@ -72,7 +72,7 @@ The LLVM build is long. Its objects are cached with ccache, and a build that rea
 To build one locally on Linux (needs `cmake`, `ninja`, `jq`, `xz` and `zip`):
 
 ```sh
-git submodule update --init --checkout --depth 1 llvm-project
+git submodule update --init --depth 1 llvm-project
 git submodule update --init qbe
 bash scripts/build-qbe.sh x86_64-linux-musl
 bash scripts/build-llvm.sh x86_64-linux-musl
