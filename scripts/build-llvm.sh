@@ -20,7 +20,7 @@ for tool in cmake ninja; do
   command -v $tool >/dev/null || { echo "$tool not found on PATH" >&2; exit 1; }
 done
 [ -f "$ROOT/llvm-project/llvm/CMakeLists.txt" ] \
-  || { echo "llvm-project is not checked out: git submodule update --init --checkout --depth 1 llvm-project" >&2; exit 1; }
+  || { echo "llvm-project is not checked out: git submodule update --init --depth 1 llvm-project" >&2; exit 1; }
 require_builder_zig
 
 ZIG=$(builder_zig)

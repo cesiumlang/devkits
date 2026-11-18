@@ -146,7 +146,7 @@ jobs:
       - name: Check out the submodules
         run: |
           for i in 1 2 3 4 5; do
-            git submodule update --init --checkout --depth 1 llvm-project && git submodule update --init qbe && break
+            git submodule update --init --depth 1 llvm-project && git submodule update --init qbe && break
             [ "$i" = 5 ] && { echo "::error::could not fetch the submodules"; exit 1; }
             sleep $((i * 30))
           done

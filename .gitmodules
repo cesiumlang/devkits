@@ -5,7 +5,3 @@
 	path = llvm-project
 	url = https://github.com/llvm/llvm-project.git
 	shallow = true
-	# several gigabytes checked out, and needed only to build a devkit: a
-	# recursive clone or update skips it. Get it with
-	#   git submodule update --init --checkout --depth 1 llvm-project
-	update = none
