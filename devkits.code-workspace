@@ -20,6 +20,16 @@
       "llvm-project/**": true,
       "qbe/**": true,
     },
+    // Pylance need not index LLVM's thousands of Python files. Setting this
+    // replaces Pylance's defaults, which are the first three entries.
+    "python.analysis.exclude": [
+      "**/node_modules",
+      "**/__pycache__",
+      "**/.*",
+      "llvm-project",
+      "work",
+      "dist",
+    ],
     "files.associations": {
       "VERSION": "plaintext",
       ".local-gitignore": "gitignore",
