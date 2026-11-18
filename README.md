@@ -81,6 +81,11 @@ bash scripts/package.sh x86_64-linux-musl
 
 Build output goes to `work/` and archives to `dist/`.
 
+## What is not in a devkit
+
+- **Clang and the LLVM tools.** The pinned Zig is the C and C++ compiler (`zig cc`), and Cesium links the LLVM libraries.
+- **clangd.** `zig cc` is Clang, so clangd is the language server for the C that Zig compiles, but it is an editor tool and not needed to build. The [clangd extension for VS Code](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd) offers to download clangd when none is on `PATH`; other editors use the clangd of the system's package manager.
+
 ## Branches
 
 Changes are collected on `dev` through pull requests and released by merging `dev` into `main`. A change to only the files listed in `no-ci.txt` (documentation, editor settings) skips the build and passes at once.
