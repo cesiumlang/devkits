@@ -2,13 +2,13 @@ name: Follow QBE
 
 # Opens a pull request into dev that moves the qbe submodule, and its pin in
 # devkit.json, to the master of the mirror cesiumlang/qbe when that has new
-# commits; an open one is updated instead. CI does not start for pull
-# requests into dev, so this workflow starts it on the branch: it builds and
-# smoke-tests every host, and the pull request is merged when that run is
-# green.
+# commits; an open one is updated instead. Its branch, qbe-updates, is the
+# one branch besides main that CI builds on a push (pull requests into dev
+# start none): every host is built and smoke-tested, and the pull request is
+# merged when that run is green.
 #
-# The pull request is opened as the Cesium Agent app, because one opened with
-# the workflow's own token cannot start workflows. Needs the secret
+# The branch is pushed as the Cesium Agent app, because a push with the
+# workflow's own token starts no CI. Needs the secret
 # CESIUM_AGENT_PRIVATE_KEY: a private key of that app.
 
 on:
@@ -29,7 +29,7 @@ defaults:
 
 env:
   MIRROR: https://github.com/cesiumlang/qbe.git
-  BRANCH: follow/qbe
+  BRANCH: qbe-updates
 
 jobs:
   follow:
@@ -111,7 +111,7 @@ jobs:
             cat qbe-log.txt
             echo '```'
             echo
-            echo "CI is started on this branch by the workflow (pull requests into \`dev\` start none); merge when that run is green. The next devkit release carries it."
+            echo "CI builds this branch, \`qbe-updates\`, on each push (pull requests into \`dev\` start none); merge when that run is green. The next devkit release carries it."
           } > body.md
           title="Move qbe to ${HEAD:0:7}"
           pr=$(gh pr list --head "$BRANCH" --base dev --state open --json number --jq '.[0].number // empty')
@@ -120,5 +120,3 @@ jobs:
           else
             gh pr create --base dev --head "$BRANCH" --title "$title" --body-file body.md
           fi
-          # pull requests into dev start no CI: start it on the branch
-          gh workflow run ci.yml --ref "$BRANCH"

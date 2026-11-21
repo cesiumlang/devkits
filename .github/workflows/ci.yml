@@ -12,6 +12,10 @@ name: CI
 # run each merge into dev restarts. To check one branch alone, start the
 # workflow by hand: `gh workflow run ci.yml --ref BRANCH`.
 #
+# The one branch besides main that is built on a push is qbe-updates, where
+# the Follow QBE workflow puts a new QBE: its pull request into dev is merged
+# when that run is green.
+#
 # A pull request builds and tests without publishing. A push or pull request
 # that changes only files of no-ci.txt skips the work, and the CI job passes
 # at once.
@@ -28,7 +32,9 @@ name: CI
 on:
   push:
     # (not dev: see the top)
-    branches: [main]
+    # qbe-updates: the branch of the Follow QBE workflow, built here because
+    # pull requests into dev start no CI
+    branches: [main, qbe-updates]
   pull_request:
     branches: [main]
   workflow_dispatch:
