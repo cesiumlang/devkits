@@ -6,8 +6,9 @@ name: CI
 # runner. A push to main whose devkit.json version has no release yet
 # publishes them as the immutable release v<version>.
 #
-# Pull requests and pushes to dev build and test without publishing. A change
-# to only the files of no-ci.txt skips the work and passes at once.
+# Pull requests and pushes to dev build and test without publishing. A push or
+# pull request that changes only files of no-ci.txt skips the work, and the
+# CI job passes at once.
 #
 # Jobs:
 #   changes  skip everything for a change to only files of no-ci.txt
@@ -63,11 +64,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.pull_request.base.sha || github.event.before }}
           AFTER: ${{ github.event.pull_request.head.sha || github.sha }}
-        # changes.sh compares a push's two ends; a pull request is compared
-        # with its base the same way
-        run: |
-          [ "$EVENT" = pull_request ] && EVENT=push
-          bash .github/scripts/changes.sh "$EVENT" "$BEFORE" "$AFTER" | tee -a "$GITHUB_OUTPUT"
+        run: bash .github/scripts/changes.sh "$EVENT" "$BEFORE" "$AFTER" | tee -a "$GITHUB_OUTPUT"
 
   prepare:
     name: Prepare

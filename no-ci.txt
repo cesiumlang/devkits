@@ -1,12 +1,20 @@
-# A change to only files matching these (bash globs, one per line) runs the
-# workflow but skips its work, so it passes at once.
+# A push or pull request that changes only files matching these (bash globs,
+# one per line; * also matches /) runs the CI workflow but skips its work, so
+# it passes at once. The build's own files always build; see ALWAYS in
+# .github/scripts/changes.sh.
+
+# documentation and licenses
 *.md
 LICENSE
-.markdownlint.jsonc
-.markdownlint-cli2.jsonc
-.cspell.jsonc
-.editorconfig
-.gitattributes
-.gitignore
+
+# editor, workspace and lint configuration
 .vscode/*
 *.code-workspace
+.editorconfig
+.cspell.jsonc
+.markdownlint.jsonc
+.markdownlint-cli2.jsonc
+.gitignore
+
+# workflows that build nothing
+.github/workflows/close-issues.yml
