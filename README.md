@@ -88,7 +88,7 @@ Build output goes to `work/` and archives to `dist/`.
 
 ## Branches
 
-Changes are collected on `dev` through pull requests and released by merging `dev` into `main`. A change to only the files listed in `no-ci.txt` (documentation, editor settings) skips the build and passes at once.
+Changes are collected on `dev` through pull requests and released by merging `dev` into `main`. A push or pull request that changes only files listed in `no-ci.txt` (documentation, editor, workspace and lint configuration, workflows that build nothing) skips the host builds, and the required `CI` check passes at once. A pull request counts only its own changes, from where it branched off. Changes to the build scripts, `devkit.json`, `.gitmodules`, `.gitattributes`, `no-ci.txt`, the submodules and `ci.yml` always build (`ALWAYS` in `.github/scripts/changes.sh`).
 
 ## Licenses
 
