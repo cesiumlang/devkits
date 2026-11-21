@@ -6,9 +6,15 @@ name: CI
 # on the host's own runner. A push to main whose devkit.json version has no
 # release yet publishes them as the immutable release v<version>.
 #
-# Pull requests and pushes to dev build and test without publishing. A push or
-# pull request that changes only files of no-ci.txt skips the work, and the
-# CI job passes at once.
+# Pull requests into main and pushes to main are run. Pushes to dev and pull
+# requests into it are not (emanspeaks, 2026-11-21; as zfls and rstd do): dev
+# is checked as a whole by the standing pull request from dev to main, whose
+# run each merge into dev restarts. To check one branch alone, start the
+# workflow by hand: `gh workflow run ci.yml --ref BRANCH`.
+#
+# A pull request builds and tests without publishing. A push or pull request
+# that changes only files of no-ci.txt skips the work, and the CI job passes
+# at once.
 #
 # Jobs:
 #   changes  skip everything for a change to only files of no-ci.txt
@@ -21,8 +27,10 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    # (not dev: see the top)
+    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish:

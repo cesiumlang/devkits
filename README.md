@@ -23,7 +23,7 @@ The design comes from the compiler's decision records: [ADR 0001](https://github
 
 LLVM and QBE are git submodules (`llvm-project`, `qbe`) at the commits `devkit.json` names; CI fails if they differ.
 
-QBE comes from [`cesiumlang/qbe`](https://github.com/cesiumlang/qbe), a mirror of upstream's `git://c9x.me/qbe.git` (its `master` and tags, unchanged, synced nightly), so that a build does not depend on one server. The devkit follows upstream: every Monday the **Follow QBE** workflow (`.github/workflows/follow-qbe.yml`) opens a pull request that moves the submodule and its pin to the mirror's `master` when it has new commits. It is merged when CI is green, and the next release carries it. The workflow opens the pull request as the Cesium Agent app, so that CI runs on it; it needs the secret `CESIUM_AGENT_PRIVATE_KEY`, a private key of that app.
+QBE comes from [`cesiumlang/qbe`](https://github.com/cesiumlang/qbe), a mirror of upstream's `git://c9x.me/qbe.git` (its `master` and tags, unchanged, synced nightly), so that a build does not depend on one server. The devkit follows upstream: every Monday the **Follow QBE** workflow (`.github/workflows/follow-qbe.yml`) opens a pull request that moves the submodule and its pin to the mirror's `master` when it has new commits. It starts CI on the branch itself, since pull requests into `dev` start none; the pull request is merged when that run is green, and the next release carries it. The workflow acts as the Cesium Agent app, whose token can start workflows; it needs the secret `CESIUM_AGENT_PRIVATE_KEY`, a private key of that app.
 
 The LLVM version follows LLVM's releases, independent of the version of the pinned Zig's own Clang, and it is compiled with that Zig. ADR 0001 asks only that: everything linked with these libraries must be compiled with the same Zig, so that the C++ standard library matches. When Zig is bumped, LLVM is rebuilt; a new LLVM release is a deliberate bump with a devkit release.
 
@@ -92,7 +92,7 @@ Build output goes to `work/` and archives to `dist/`.
 
 ## Branches
 
-Changes are collected on `dev` through pull requests and released by merging `dev` into `main`. A push or pull request that changes only files listed in `no-ci.txt` (documentation, editor, workspace and lint configuration, workflows that build nothing) skips the host builds, and the required `CI` check passes at once. A pull request counts only its own changes, from where it branched off. Changes to the build scripts, `devkit.json`, `.gitmodules`, `.gitattributes`, `no-ci.txt`, the submodules and `ci.yml` always build (`ALWAYS` in `.github/scripts/changes.sh`).
+Changes are collected on `dev` through pull requests and released by merging `dev` into `main`. CI runs for pull requests into `main` and pushes to `main`, not for `dev`: the standing pull request from `dev` to `main` checks `dev` as a whole, and each merge into `dev` restarts its run; `gh workflow run ci.yml --ref BRANCH` checks one branch alone. A push or pull request that changes only files listed in `no-ci.txt` (documentation, editor, workspace and lint configuration, workflows that build nothing) skips the host builds, and the required `CI` check passes at once. A pull request counts only its own changes, from where it branched off. Changes to the build scripts, `devkit.json`, `.gitmodules`, `.gitattributes`, `no-ci.txt`, the submodules and `ci.yml` always build (`ALWAYS` in `.github/scripts/changes.sh`).
 
 ## Licenses
 
