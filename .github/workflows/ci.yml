@@ -12,9 +12,16 @@ name: CI
 # run each merge into dev restarts. To check one branch alone, start the
 # workflow by hand: `gh workflow run ci.yml --ref BRANCH`.
 #
-# The one branch besides main that is built on a push is qbe-updates, where
-# the Follow QBE workflow puts a new QBE: its pull request into dev is merged
-# when that run is green.
+# Versions: devkit.json holds the version the next release will have. A pull
+# request into main that changes a devkit must carry a version that has no
+# release yet. After a release, main is merged back into dev, where the next
+# patch version is begun; for a minor or major release, set the version on
+# dev by hand.
+#
+# Pull requests into main come from dev (the standing pull request) and from
+# the branches of automated updates, named <what>-updates-<id>: the Follow
+# QBE workflow opens one from qbe-updates-<commit> for a new QBE, with the
+# next patch version, so that it is a release of its own.
 #
 # A pull request builds and tests without publishing. A push or pull request
 # that changes only files of no-ci.txt skips the work, and the CI job passes
@@ -27,14 +34,13 @@ name: CI
 #   build    one devkit per host, cross-compiled on Linux
 #   smoke    each devkit on its own host
 #   publish  the release v<version>: archives, manifests, devkits.json, SHA256SUMS
+#   begin-next-version  main merged back into dev, with the next version
 #   CI       the one check the rulesets require
 
 on:
   push:
     # (not dev: see the top)
-    # qbe-updates: the branch of the Follow QBE workflow, built here because
-    # pull requests into dev start no CI
-    branches: [main, qbe-updates]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -102,6 +108,18 @@ jobs:
             # what the LLVM objects depend on: the pins and the build script
             echo "llvm_key=$(jq -c '[.zig.version, .llvm]' devkit.json | cat - scripts/build-llvm.sh | sha256sum | cut -c1-16)"
           } | tee -a "$GITHUB_OUTPUT"
+
+      # a devkit that differs from a released one must not carry its version
+      - name: A pull request into main carries an unreleased version
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.pins.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error file=devkit.json::version is $VERSION, and v$VERSION is already released. Set a newer version."
+            exit 1
+          fi
 
       - name: Does this run publish?
         id: publish
@@ -303,9 +321,59 @@ jobs:
             --notes "Devkits for building the Cesium compiler: Zig $(jq -er .zig devkits.json), LLVM and LLD $(jq -er .llvm.version devkits.json) (static libraries, targets $(jq -er '.llvm.targets | join(", ")' devkits.json), with zlib $(jq -er .llvm.zlib.version devkits.json) and zstd $(jq -er .llvm.zstd.version devkits.json)), and QBE at \`$(jq -er '.qbe[0:7]' devkits.json)\`. \`devkits.json\` lists the archive of each host with its sha256." \
             cesium-devkit-* devkits.json SHA256SUMS
 
+  # The next version is begun on dev: main keeps the version it released. A
+  # separate job, so that a push dev refuses does not undo the release.
+  begin-next-version:
+    name: Merge v${{ needs.prepare.outputs.version }} into dev and begin the next version
+    needs: [prepare, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # A fast-forward when dev has nothing of its own, else a merge commit.
+      # Where both changed the same lines, dev's are kept: that is the version,
+      # when dev had begun a later one than an update released from main.
+      - name: Merge into dev and begin the next version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tagged() { git rev-parse -q --verify "refs/tags/v$1" >/dev/null; }
+          for attempt in 1 2 3; do
+            git fetch -q --tags origin dev
+            git checkout -q -B dev origin/dev
+            if ! git merge -q -X ours -m "Merge v$VERSION into dev [skip ci]" "$GITHUB_SHA"; then
+              git merge --abort
+              echo "::error::v$VERSION conflicts with dev; merge main into dev by hand and set the next version"
+              exit 1
+            fi
+            version=$(jq -er .version devkit.json)
+            if tagged "$version"; then
+              next=$version
+              while tagged "$next"; do
+                IFS=. read -r ma mi pa <<< "$next"
+                next="$ma.$mi.$((pa + 1))"
+              done
+              # the first "version" of the file is the devkit's own
+              sed -i -E "0,/^  \"version\": \"[^\"]+\"/ s//  \"version\": \"$next\"/" devkit.json
+              git commit -qam "Begin v$next development [skip ci]"
+            fi
+            if git push -q origin dev; then exit 0; fi
+            echo "dev moved while merging; trying again"
+          done
+          echo "::error::could not push to dev"
+          exit 1
+
   ci:
     name: CI
-    needs: [changes, prepare, lint, build, smoke, publish]
+    needs: [changes, prepare, lint, build, smoke, publish, begin-next-version]
     if: always()
     runs-on: ubuntu-24.04
     steps:
