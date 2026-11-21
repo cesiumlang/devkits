@@ -2,9 +2,9 @@ name: CI
 
 # Builds the Cesium devkit of every host in devkit.json: the pinned official
 # Zig, LLVM and LLD cross-compiled with it as static libraries (no Clang, no
-# tools), and the pinned QBE. Each devkit is smoke-tested on the host's own
-# runner. A push to main whose devkit.json version has no release yet
-# publishes them as the immutable release v<version>.
+# tools) with zlib and zstd, and the pinned QBE. Each devkit is smoke-tested
+# on the host's own runner. A push to main whose devkit.json version has no
+# release yet publishes them as the immutable release v<version>.
 #
 # Pull requests and pushes to dev build and test without publishing. A push or
 # pull request that changes only files of no-ci.txt skips the work, and the
@@ -163,6 +163,9 @@ jobs:
       - name: Build QBE
         run: bash scripts/build-qbe.sh "$HOST"
 
+      - name: Build zlib and zstd
+        run: bash scripts/build-compression.sh "$HOST"
+
       - name: Restore ccache
         uses: actions/cache/restore@v6
         with:
@@ -283,7 +286,7 @@ jobs:
         run: |
           gh release create "v$VERSION" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "Cesium devkits $VERSION" \
-            --notes "Devkits for building the Cesium compiler: Zig $(jq -er .zig devkits.json), LLVM and LLD $(jq -er .llvm.version devkits.json) (static libraries, targets $(jq -er '.llvm.targets | join(", ")' devkits.json)), and QBE at \`$(jq -er '.qbe[0:7]' devkits.json)\`. \`devkits.json\` lists the archive of each host with its sha256." \
+            --notes "Devkits for building the Cesium compiler: Zig $(jq -er .zig devkits.json), LLVM and LLD $(jq -er .llvm.version devkits.json) (static libraries, targets $(jq -er '.llvm.targets | join(", ")' devkits.json), with zlib $(jq -er .llvm.zlib.version devkits.json) and zstd $(jq -er .llvm.zstd.version devkits.json)), and QBE at \`$(jq -er '.qbe[0:7]' devkits.json)\`. \`devkits.json\` lists the archive of each host with its sha256." \
             cesium-devkit-* devkits.json SHA256SUMS
 
   ci:

@@ -72,6 +72,22 @@ sha256_of () {
   fi
 }
 
+# Download <url> to <file> unless it is there already, retrying, and check it
+# against <sha256>.
+fetch_pinned () { # <url> <sha256> <file>
+  local url=$1 sum=$2 file=$3 got i
+  mkdir -p "$(dirname "$file")"
+  if [ ! -f "$file" ] || [ "$(sha256_of "$file")" != "$sum" ]; then
+    for i in 1 2 3 4 5; do
+      curl -fsSL --retry 3 -o "$file" "$url" && break
+      [ "$i" = 5 ] && { echo "could not download $url" >&2; return 1; }
+      sleep $((i * 15))
+    done
+  fi
+  got=$(sha256_of "$file")
+  [ "$got" = "$sum" ] || { echo "$(basename "$file"): sha256 $got, devkit.json pins $sum" >&2; return 1; }
+}
+
 # The Zig that compiles everything: the pinned official release for the
 # machine the scripts run on, fetched by fetch-zig.sh.
 builder_zig () {
