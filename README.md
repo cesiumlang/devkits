@@ -23,6 +23,8 @@ The design comes from the compiler's decision records: [ADR 0001](https://github
 
 LLVM and QBE are git submodules (`llvm-project`, `qbe`) at the commits `devkit.json` names; CI fails if they differ.
 
+QBE comes from [`cesiumlang/qbe`](https://github.com/cesiumlang/qbe), a mirror of upstream's `git://c9x.me/qbe.git` (its `master` and tags, unchanged, synced nightly), so that a build does not depend on one server. The devkit follows upstream: every Monday the **Follow QBE** workflow (`.github/workflows/follow-qbe.yml`) opens a pull request that moves the submodule and its pin to the mirror's `master` when it has new commits. It is merged when CI is green, and the next release carries it. The workflow opens the pull request as the Cesium Agent app, so that CI runs on it; it needs the secret `CESIUM_AGENT_PRIVATE_KEY`, a private key of that app.
+
 The LLVM version is the one the pinned Zig's own Clang is built from, and LLVM is compiled with that Zig. Everything linked with these libraries must be compiled with the same Zig, so that the C++ standard library matches. When Zig is bumped, LLVM is rebuilt.
 
 ## Hosts

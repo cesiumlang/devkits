@@ -18,3 +18,4 @@ LICENSE
 
 # workflows that build nothing
 .github/workflows/close-issues.yml
+.github/workflows/follow-qbe.yml

@@ -1,6 +1,7 @@
 [submodule "qbe"]
 	path = qbe
-	url = git://c9x.me/qbe.git
+	url = https://github.com/cesiumlang/qbe.git
+	branch = master
 [submodule "llvm-project"]
 	path = llvm-project
 	url = https://github.com/llvm/llvm-project.git

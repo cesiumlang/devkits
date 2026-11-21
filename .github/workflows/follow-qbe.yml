@@ -1,0 +1,120 @@
+name: Follow QBE
+
+# Opens a pull request into dev that moves the qbe submodule, and its pin in
+# devkit.json, to the master of the mirror cesiumlang/qbe when that has new
+# commits; an open one is updated instead. Its CI builds and smoke-tests every
+# host, and it is merged when green.
+#
+# The pull request is opened as the Cesium Agent app, because one opened with
+# the workflow's own token starts no CI. Needs the secret
+# CESIUM_AGENT_PRIVATE_KEY: a private key of that app.
+
+on:
+  schedule:
+    - cron: '47 5 * * 1'   # Mondays 05:47 UTC, after the mirror's nightly sync
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  MIRROR: https://github.com/cesiumlang/qbe.git
+  BRANCH: follow/qbe
+
+jobs:
+  follow:
+    runs-on: ubuntu-24.04
+    steps:
+      # without the workflow token's credentials, so the push goes as the app
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          persist-credentials: false
+
+      - name: Compare the pin with the mirror
+        id: compare
+        run: |
+          pinned=$(jq -er .qbe.commit devkit.json)
+          head=$(git ls-remote "$MIRROR" refs/heads/master | cut -f1)
+          [ -n "$head" ] || { echo "::error::no master in $MIRROR"; exit 1; }
+          echo "pinned $pinned, mirror master $head"
+          move=true
+          if [ "$head" = "$pinned" ]; then
+            echo "qbe is current"
+            move=false
+          fi
+          { echo "pinned=$pinned"; echo "head=$head"; echo "move=$move"; } >> "$GITHUB_OUTPUT"
+
+      - name: Is the app's key set?
+        if: steps.compare.outputs.move == 'true'
+        env:
+          KEY: ${{ secrets.CESIUM_AGENT_PRIVATE_KEY }}
+        run: '[ -n "$KEY" ] || { echo "::error::the secret CESIUM_AGENT_PRIVATE_KEY is not set"; exit 1; }'
+
+      - name: Get the app's token
+        if: steps.compare.outputs.move == 'true'
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: Iv23liXrtnf12IOEFv6c
+          private-key: ${{ secrets.CESIUM_AGENT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Move qbe and its pin
+        if: steps.compare.outputs.move == 'true'
+        env:
+          PINNED: ${{ steps.compare.outputs.pinned }}
+          HEAD: ${{ steps.compare.outputs.head }}
+          TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          git submodule update --init qbe
+          git -C qbe fetch --quiet origin master
+          # forward only: the mirror never rewrites master
+          git -C qbe merge-base --is-ancestor "$PINNED" "$HEAD" \
+            || { echo "::error::$HEAD does not descend from the pin $PINNED"; exit 1; }
+          git -C qbe checkout --quiet --detach "$HEAD"
+          # sed, not jq: jq would reformat the whole file
+          sed -i -E "/\"qbe\": \{/,/\}/ s/(\"commit\": \")[0-9a-f]{40}/\1$HEAD/" devkit.json
+          [ "$(jq -er .qbe.commit devkit.json)" = "$HEAD" ] || { echo "::error::could not write the pin"; exit 1; }
+          git -C qbe log --oneline "$PINNED..$HEAD" | tee qbe-log.txt
+          git config user.name 'cesium-agent[bot]'
+          git config user.email '359230132+cesium-agent[bot]@users.noreply.github.com'
+          git switch --quiet -c "$BRANCH"
+          git add qbe devkit.json
+          git commit --quiet -m "Move qbe to ${HEAD:0:7}"
+          git push --force "https://x-access-token:$TOKEN@github.com/$GITHUB_REPOSITORY.git" "$BRANCH"
+
+      - name: Open or update the pull request
+        if: steps.compare.outputs.move == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PINNED: ${{ steps.compare.outputs.pinned }}
+          HEAD: ${{ steps.compare.outputs.head }}
+        run: |
+          {
+            echo "Moves the \`qbe\` submodule and its pin in \`devkit.json\` from \`${PINNED:0:7}\` to \`${HEAD:0:7}\`, the master of [cesiumlang/qbe](https://github.com/cesiumlang/qbe), by the **Follow QBE** workflow."
+            echo
+            echo "Upstream's commits since the pin:"
+            echo
+            echo '```text'
+            cat qbe-log.txt
+            echo '```'
+            echo
+            echo "Merge when CI is green; the next devkit release carries it."
+          } > body.md
+          title="Move qbe to ${HEAD:0:7}"
+          pr=$(gh pr list --head "$BRANCH" --base dev --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "$title" --body-file body.md
+          else
+            gh pr create --base dev --head "$BRANCH" --title "$title" --body-file body.md
+          fi
