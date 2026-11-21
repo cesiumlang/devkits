@@ -21,6 +21,8 @@ for tool in cmake ninja; do
 done
 [ -f "$ROOT/llvm-project/llvm/CMakeLists.txt" ] \
   || { echo "llvm-project is not checked out: git submodule update --init --depth 1 llvm-project" >&2; exit 1; }
+COMPRESSION=$WORK/compression-$HOST
+[ -f "$COMPRESSION/lib/libzstd.a" ] || { echo "no zlib and zstd for $HOST: run build-compression.sh" >&2; exit 1; }
 require_builder_zig
 
 ZIG=$(builder_zig)
@@ -89,7 +91,8 @@ configure "$TBLGEN" -S "$SRC/llvm" -G Ninja \
   -DLLVM_INCLUDE_DOCS=OFF
 cmake --build "$TBLGEN" --target llvm-tblgen
 
-# 2. LLVM core, the targets of devkit.json, and LLD, as static libraries
+# 2. LLVM core, the targets of devkit.json, and LLD, as static libraries, with
+# the zlib and zstd of build-compression.sh for compressed debug sections
 # (LLVM_BUILD_STATIC is not set: it only adds -static to the link of LLVM's
 # own programs, none of which are built, and CMake's compiler checks then
 # fail for macOS, where nothing links statically. The libraries are static
@@ -119,8 +122,13 @@ configure "$BUILD" -S "$SRC/llvm" -G Ninja \
   -DLLVM_ENABLE_OCAMLDOC=OFF \
   -DLLVM_ENABLE_PLUGINS=OFF \
   -DLLVM_ENABLE_Z3_SOLVER=OFF \
-  -DLLVM_ENABLE_ZLIB=OFF \
-  -DLLVM_ENABLE_ZSTD=OFF \
+  -DLLVM_ENABLE_ZLIB=FORCE_ON \
+  -DZLIB_INCLUDE_DIR="$COMPRESSION/include" \
+  -DZLIB_LIBRARY="$COMPRESSION/lib/libz.a" \
+  -DLLVM_ENABLE_ZSTD=FORCE_ON \
+  -DLLVM_USE_STATIC_ZSTD=ON \
+  -Dzstd_INCLUDE_DIR="$COMPRESSION/include" \
+  -Dzstd_LIBRARY="$COMPRESSION/lib/libzstd.a" \
   -DLLVM_TABLEGEN="$TBLGEN/bin/llvm-tblgen" \
   -DLLVM_BUILD_UTILS=OFF \
   -DLLVM_BUILD_TOOLS=OFF \

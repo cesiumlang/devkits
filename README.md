@@ -5,9 +5,9 @@ Prebuilt toolchain packages for building the [Cesium](https://github.com/cesiuml
 | Directory | Holds |
 | --- | --- |
 | `zig/` | The pinned official [Zig](https://ziglang.org) release for the host, unmodified. It is the C/C++ compiler (`zig cc`) and runs `build.zig`. |
-| `llvm/` | LLVM and LLD as static libraries with their headers (`include/`, `lib/`). No Clang and no LLVM tools. |
+| `llvm/` | LLVM and LLD as static libraries with their headers (`include/`, `lib/`), and the zlib and zstd they use for compressed debug sections (`lib/libz.a`, `lib/libzstd.a`). No Clang and no LLVM tools. |
 | `qbe/` | [QBE](https://c9x.me/compile/) at a pinned commit: the `qbe` program (`bin/`), `libqbe.a` with `qbe.h` for running QBE in-process (`lib/`, `include/`), and its source (`src/`). |
-| `manifest.json` | What the devkit was built from: the Zig version and checksum, the LLVM tag and target list, the QBE commit, and this repository's commit. |
+| `manifest.json` | What the devkit was built from: the Zig version and checksum, the LLVM tag and target list, the zlib and zstd versions, the QBE commit, and this repository's commit. |
 
 The design comes from the compiler's decision records: [ADR 0001](https://github.com/cesiumlang/cesium/issues/4) (LLVM packaging and toolchain), [ADR 0002](https://github.com/cesiumlang/cesium/issues/5) (bootstrap) and [ADR 0004](https://github.com/cesiumlang/cesium/issues/7) (QBE first, LLVM as the release backend). The pipeline is adapted from [randyos-org/zig-devkits](https://github.com/randyos-org/zig-devkits) and [randyos-org/zig-build](https://github.com/randyos-org/zig-build).
 
@@ -17,7 +17,7 @@ The design comes from the compiler's decision records: [ADR 0001](https://github
 
 - `version`: the devkit version. It names the release.
 - `zig`: the official Zig release, with the sha256 of its archive for each host.
-- `llvm`: the LLVM tag and commit, the targets (`X86`, `AArch64`, `ARM`, `PowerPC`, `SPIRV`, `WebAssembly`) and the projects (`lld`).
+- `llvm`: the LLVM tag and commit, the targets (`X86`, `AArch64`, `ARM`, `PowerPC`, `SPIRV`, `WebAssembly`) and the projects (`lld`); `zlib` and `zstd`: the version, release archive and sha256 of each.
 - `qbe`: the QBE commit, and the target `qbe` emits by default on each host.
 - `hosts`: the hosts a devkit is built for, each with the GitHub runner that tests it.
 
@@ -25,7 +25,7 @@ LLVM and QBE are git submodules (`llvm-project`, `qbe`) at the commits `devkit.j
 
 QBE comes from [`cesiumlang/qbe`](https://github.com/cesiumlang/qbe), a mirror of upstream's `git://c9x.me/qbe.git` (its `master` and tags, unchanged, synced nightly), so that a build does not depend on one server. The devkit follows upstream: every Monday the **Follow QBE** workflow (`.github/workflows/follow-qbe.yml`) opens a pull request that moves the submodule and its pin to the mirror's `master` when it has new commits. It is merged when CI is green, and the next release carries it. The workflow opens the pull request as the Cesium Agent app, so that CI runs on it; it needs the secret `CESIUM_AGENT_PRIVATE_KEY`, a private key of that app.
 
-The LLVM version is the one the pinned Zig's own Clang is built from, and LLVM is compiled with that Zig. Everything linked with these libraries must be compiled with the same Zig, so that the C++ standard library matches. When Zig is bumped, LLVM is rebuilt.
+The LLVM version follows LLVM's releases, independent of the version of the pinned Zig's own Clang, and it is compiled with that Zig. ADR 0001 asks only that: everything linked with these libraries must be compiled with the same Zig, so that the C++ standard library matches. When Zig is bumped, LLVM is rebuilt; a new LLVM release is a deliberate bump with a devkit release.
 
 ## Hosts
 
@@ -64,10 +64,11 @@ The **CI** workflow (`.github/workflows/ci.yml`) cross-compiles every host's dev
 
 1. **Zig:** `scripts/fetch-zig.sh` downloads the pinned official release and checks its sha256.
 2. **QBE:** `scripts/build-qbe.sh <host>` compiles QBE with `zig cc`, once as the program and once with `-Dmain=qbe_main` as `libqbe.a`.
-3. **LLVM:** `scripts/build-llvm.sh <host>` builds a native `llvm-tblgen`, then LLVM and LLD for the host with `zig cc` and `zig c++` through CMake and Ninja. CMake runs only here.
-4. **Package:** `scripts/package.sh <host>` assembles the archive and its manifest.
-5. **Smoke test:** `scripts/smoke.sh <devkit>` runs on the host. Using only the devkit's own Zig, it compiles a C program, links a program against the LLVM and LLD libraries that emits objects for several targets and links ELF, COFF and Wasm outputs in-process, and runs QBE both as a program and through `libqbe.a`.
-6. **Publish:** a push to `main` whose `devkit.json` version has no release yet publishes `v<version>`.
+3. **zlib and zstd:** `scripts/build-compression.sh <host>` downloads their pinned release archives, checks their sha256, and compiles their library sources with `zig cc` into `libz.a` and `libzstd.a`.
+4. **LLVM:** `scripts/build-llvm.sh <host>` builds a native `llvm-tblgen`, then LLVM and LLD for the host with `zig cc` and `zig c++` through CMake and Ninja. It builds with zlib and zstd. CMake runs only here.
+5. **Package:** `scripts/package.sh <host>` assembles the archive and its manifest.
+6. **Smoke test:** `scripts/smoke.sh <devkit>` runs on the host. Using only the devkit's own Zig, it compiles a C program, links a program against the LLVM and LLD libraries that emits objects for several targets and links ELF, COFF and Wasm outputs in-process, round-trips data through zlib and zstd, and runs QBE both as a program and through `libqbe.a`.
+7. **Publish:** a push to `main` whose `devkit.json` version has no release yet publishes `v<version>`.
 
 The LLVM build is long. Its objects are cached with ccache, and a build that reaches the time limit can be re-run to resume.
 
@@ -77,6 +78,7 @@ To build one locally on Linux (needs `cmake`, `ninja`, `jq`, `xz` and `zip`):
 git submodule update --init --depth 1 llvm-project
 git submodule update --init qbe
 bash scripts/build-qbe.sh x86_64-linux-musl
+bash scripts/build-compression.sh x86_64-linux-musl
 bash scripts/build-llvm.sh x86_64-linux-musl
 bash scripts/package.sh x86_64-linux-musl
 ```
@@ -94,4 +96,4 @@ Changes are collected on `dev` through pull requests and released by merging `de
 
 ## Licenses
 
-This repository's own files are MIT (`LICENSE`). The devkits carry Zig (MIT), LLVM and LLD (Apache-2.0 WITH LLVM-exception) and QBE (MIT), each under its own license.
+This repository's own files are MIT (`LICENSE`). The devkits carry Zig (MIT), LLVM and LLD (Apache-2.0 WITH LLVM-exception), zlib (zlib License; `llvm/LICENSE-zlib`), zstd (BSD-3-Clause; `llvm/LICENSE-zstd`) and QBE (MIT), each under its own license.
