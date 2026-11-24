@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "zig": {
     "version": "0.17.1",
     "base_url": "https://ziglang.org/download/0.17.1",
@@ -31,11 +31,21 @@
     }
   },
   "llvm": {
-    "version": "22.1.8",
-    "tag": "llvmorg-22.1.8",
-    "commit": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+    "version": "23.1.6",
+    "tag": "llvmorg-23.1.6",
+    "commit": "5b10d2d74929eae78912771222c9855af97496f4",
     "targets": ["X86", "AArch64", "ARM", "PowerPC", "SPIRV", "WebAssembly"],
-    "projects": ["lld"]
+    "projects": ["lld"],
+    "zlib": {
+      "version": "1.4",
+      "url": "https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz",
+      "sha256": "02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584"
+    },
+    "zstd": {
+      "version": "1.5.7",
+      "url": "https://github.com/meta/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz",
+      "sha256": "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3"
+    }
   },
   "qbe": {
     "commit": "180d2eb4157b706dc480bce50ff6d03a65ec334b",

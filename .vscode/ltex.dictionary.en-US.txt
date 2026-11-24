@@ -8,3 +8,5 @@ mingw
 WebAssembly
 SPIRV
 AArch64
+zlib
+zstd

@@ -1,7 +1,8 @@
 // Smoke test of a devkit's LLVM and LLD libraries: what the Cesium compiler
 // will do with them, in miniature. Parses LLVM IR through the C API, emits an
-// object file for one target per architecture family, and links with
-// in-process LLD through the shim of ADR 0001 (cesiumlang/cesium#4).
+// object file for one target per architecture family, links with in-process
+// LLD through the shim of ADR 0001 (cesiumlang/cesium#4), and round-trips data
+// through zlib and zstd, which LLD uses for compressed debug sections.
 //
 // usage: smoke <output directory>
 #include "lld/Common/Driver.h"
@@ -9,11 +10,14 @@
 #include "llvm-c/IRReader.h"
 #include "llvm-c/Target.h"
 #include "llvm-c/TargetMachine.h"
+#include "llvm/Support/Compression.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <utility>
 
 LLD_HAS_DRIVER(elf)
 LLD_HAS_DRIVER(coff)
@@ -70,6 +74,33 @@ static int emit(const char *triple, const std::string &path) {
   return 0;
 }
 
+// Compress `ir` with a format and decompress it again. Returns 0 on success.
+static int round_trip(llvm::compression::Format format, const char *name) {
+  namespace compression = llvm::compression;
+  if (const char *why = compression::getReasonIfUnsupported(format)) {
+    std::fprintf(stderr, "%s: %s\n", name, why);
+    return 1;
+  }
+  llvm::ArrayRef<uint8_t> in(reinterpret_cast<const uint8_t *>(ir),
+                             sizeof ir - 1);
+  llvm::SmallVector<uint8_t, 0> packed, unpacked;
+  compression::compress(compression::Params(format), in, packed);
+  if (llvm::Error e =
+          compression::decompress(format, packed, unpacked, in.size())) {
+    std::fprintf(stderr, "%s: %s\n", name,
+                 llvm::toString(std::move(e)).c_str());
+    return 1;
+  }
+  if (unpacked.size() != in.size() ||
+      std::memcmp(unpacked.data(), in.data(), in.size()) != 0) {
+    std::fprintf(stderr, "%s: the data changed\n", name);
+    return 1;
+  }
+  std::printf("%s ok: %zu bytes, %zu compressed\n", name, in.size(),
+              packed.size());
+  return 0;
+}
+
 int main(int argc, char **argv) {
   if (argc != 2) {
     std::fprintf(stderr, "usage: smoke <output directory>\n");
@@ -98,6 +129,9 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (round_trip(llvm::compression::Format::Zlib, "zlib")) return 1;
+  if (round_trip(llvm::compression::Format::Zstd, "zstd")) return 1;
+
   std::string elf = dir + "/answer-elf.o";
   std::string coff = dir + "/answer-coff.obj";
   std::string wasm = dir + "/answer-wasm.o";
@@ -109,9 +143,12 @@ int main(int argc, char **argv) {
   if (emit("powerpc-unknown-none-eabi", dir + "/answer-ppc.o")) return 1;
 
   std::string elf_out = dir + "/answer-elf";
-  const char *elf_args[] = {"ld.lld", "-e", "answer", elf.c_str(),
-                            "-o",     elf_out.c_str()};
-  if (lld_link(6, elf_args)) return 1;
+  // LLD refuses the option when it was built without zstd
+  const char *elf_args[] = {"ld.lld",      "--compress-debug-sections=zstd",
+                            "-e",          "answer",
+                            elf.c_str(),   "-o",
+                            elf_out.c_str()};
+  if (lld_link(7, elf_args)) return 1;
   std::printf("linked %s\n", elf_out.c_str());
 
   std::string coff_out = "/out:" + dir + "/answer-coff.exe";
